@@ -18,6 +18,19 @@ An interactive web application for analyzing and interpreting ReLU neural networ
 - 📊 **Interactive Visualizations**: Intuitive plots and charts
 - 🤖 **AI-Powered Explanations**: GPT-4.1 mini explanations via OpenRouter for deeper insights
 
+## 📸 App Preview
+
+<p align="center">
+  <img src="images/image1.png" alt="Re3 App Overview" width="48%"/>
+  <img src="images/image2.png" alt="Re3 App Analysis" width="48%"/>
+</p>
+<p align="center">
+  <img src="images/image3.png" alt="Re3 App Regions" width="48%"/>
+  <img src="images/image4.png" alt="Re3 App Details" width="48%"/>
+</p>
+
+*Screenshots of the Re3 interactive application: load models and datasets, explore single-sample and region analysis, and view interpretability results.*
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -129,6 +142,7 @@ Re3-ReLU-Region-Reason/
 ├── APP_README.md                   # Application documentation
 ├── QUICK_START_GUIDE.md            # Quick start guide
 ├── CONTRIBUTING.md                 # Contribution guidelines
+├── images/                         # Screenshots for README (image1–4.png)
 └── [datasets]                      # CSV dataset files (e.g. iris_training_set.csv, *.csv)
 ```
 
