@@ -16,7 +16,7 @@ An interactive web application for analyzing and interpreting ReLU neural networ
 - 🔍 **Single Sample Analysis**: Precise feature-level and neuron-level contributions
 - 📈 **Region Analysis**: Automatic identification and analysis of linear regions
 - 📊 **Interactive Visualizations**: Intuitive plots and charts
-- 🤖 **AI-Powered Explanations**: GPT-4.1 mini explanations via OpenRouter for deeper insights
+- 🤖 **AI-Powered Explanations**: GPT-4.1 mini (any model can be chosen) explanations via OpenRouter for deeper insights
 
 ## 📸 App Preview
 
