@@ -24,8 +24,8 @@ An interactive web application for analyzing and interpreting ReLU neural networ
 
 ```bash
 # Clone repository
-git clone https://github.com/rickystanley76/Re3-ReLU-Region-Reason.git
-cd Re3-ReLU-Region-Reason
+git clone https://github.com/rickystanley76/Re3-ReLU-Region-Reason-.git
+cd Re3-ReLU-Region-Reason-
 
 # Install UV (recommended)
 # Windows: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
