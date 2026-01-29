@@ -14,15 +14,29 @@ from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import accuracy_score
 import sys
 import os
+from typing import Tuple
+
+def _read_csv_auto(path: str) -> pd.DataFrame:
+    """
+    Read a CSV-like file with automatic delimiter detection.
+
+    Many of our provided datasets are semicolon-delimited (';') even though they
+    have a .csv extension. Using sep=None + engine='python' lets pandas infer
+    the delimiter reliably (',' vs ';' etc.).
+    """
+    return pd.read_csv(path, sep=None, engine="python")
 
 def load_iris_dataset():
     """Load and prepare Iris dataset"""
     print("Loading Iris dataset...")
-    df = pd.read_csv('iris.csv')
+    # Note: file is semicolon-delimited in this repo
+    df = _read_csv_auto('iris_training_set.csv')
     
     # Prepare data
+    # The last column should be 'variety' (Setosa, Versicolor, Virginica)
     le = LabelEncoder()
     df['label'] = le.fit_transform(df.iloc[:, -1])
+    # Drop the original variety column (keep only label)
     df = df.drop(columns=[df.columns[-2]])
     
     X = df.iloc[:, :-1].values
@@ -33,15 +47,26 @@ def load_iris_dataset():
 def load_accelerometer_dataset():
     """Load and prepare Accelerometer/Gyro dataset"""
     print("Loading Accelerometer/Gyro Mobile Phone dataset...")
-    df = pd.read_csv('accelerometer_gyro_mobile_phone_dataset.csv')
+    df = _read_csv_auto('accelerometer_Training_set.csv')
     
-    # Drop timestamp column if it exists
+    # Drop timestamp column if it exists (non-numeric like 36:03.1)
     if 'timestamp' in df.columns:
         df = df.drop(columns=['timestamp'])
     
     # Activity is the target (last column)
-    X = df.iloc[:, :-1].values
+    X_df = df.iloc[:, :-1].copy()
     y = df.iloc[:, -1].values
+
+    # Ensure features are numeric (defensive)
+    for c in X_df.columns:
+        X_df[c] = pd.to_numeric(X_df[c], errors="coerce")
+    # Drop any columns that became entirely NaN after coercion
+    X_df = X_df.dropna(axis=1, how="all")
+    # Drop rows with any NaNs
+    X_df = X_df.dropna(axis=0, how="any")
+    # Align y with filtered rows
+    y = y[X_df.index.values]
+    X = X_df.values
     
     # Encode labels if needed (in case they're not numeric)
     if y.dtype == object:
@@ -51,12 +76,13 @@ def load_accelerometer_dataset():
     # Get number of unique classes
     n_classes = len(np.unique(y))
     
-    return X, y, 'Accelerometer', 6, n_classes
+    return X, y, 'Accelerometer', X.shape[1], n_classes
 
 def load_diabetes_dataset():
     """Load and prepare Diabetes dataset"""
     print("Loading Diabetes Binary Health Indicators dataset...")
-    df = pd.read_csv('diabetes_binary_health_indicators_BRFSS2015.csv')
+    # Note: file is semicolon-delimited in this repo
+    df = _read_csv_auto('diabetes_Training_set.csv')
     
     # Diabetes_binary is the first column (target)
     # All other columns are features
@@ -64,7 +90,8 @@ def load_diabetes_dataset():
     y = df.iloc[:, 0].values
     
     # Convert to integer if needed
-    y = y.astype(int)
+    # Data may come as floats (0.0/1.0) depending on how the CSV was produced.
+    y = pd.to_numeric(y, errors="raise").astype(int)
     
     # Get number of unique classes (should be 2 for binary classification)
     n_classes = len(np.unique(y))
@@ -133,9 +160,9 @@ def main():
     print("Re3 Quick Start - Model Training")
     print("=" * 60)
     print("\nAvailable datasets:")
-    print("1. Iris (iris.csv)")
-    print("2. Accelerometer/Gyro Mobile Phone (accelerometer_gyro_mobile_phone_dataset.csv)")
-    print("3. Diabetes Binary Health Indicators (diabetes_binary_health_indicators_BRFSS2015.csv)")
+    print("1. Iris (iris_training_set.csv)")
+    print("2. Accelerometer/Gyro Mobile Phone (accelerometer_Training_set.csv)")
+    print("3. Diabetes Binary Health Indicators (diabetes_training_set.csv)")
     print("\n" + "=" * 60)
     
     # Dataset configuration

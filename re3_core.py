@@ -90,6 +90,24 @@ def compute_region_affine_2layer(x: np.ndarray, w1: np.ndarray, b1: np.ndarray,
                                   w3: np.ndarray, b3: np.ndarray) -> Tuple:
     """
     Compute region-specific affine map for 2 hidden layer network.
+    
+    Args:
+        x: Input vector (d,)
+        w1: First hidden layer weights (h1, d)
+        b1: First hidden layer biases (h1,)
+        w2: Second hidden layer weights (h2, h1)
+        b2: Second hidden layer biases (h2,)
+        w3: Output layer weights (c, h2)
+        b3: Output layer biases (c,)
+        
+    Returns:
+        A_r: Effective weight matrix (c, d)
+        D_r: Effective bias vector (c,)
+        logits: Output logits (c,)
+        pred: Predicted class index
+        c1: First hidden layer neuron contributions (h1,)
+        c2: Second hidden layer neuron contributions (h2,)
+        region_id: Region identifier string
     """
     # First hidden layer
     Z1 = w1.dot(x) + b1
@@ -112,8 +130,8 @@ def compute_region_affine_2layer(x: np.ndarray, w1: np.ndarray, b1: np.ndarray,
     D_r = b3 + W3m.dot(b2) + W3m.dot(W2m).dot(b1)
     
     # Neuron contributions
-    c1 = H1 * (W2m.T.dot(W3m[pred]))
     c2 = H2 * W3m[pred]
+    c1 = H1 * W2m.dot(c2)
     
     # Region ID
     S1_bits = ''.join(str(int(b)) for b in S1)
@@ -124,11 +142,32 @@ def compute_region_affine_2layer(x: np.ndarray, w1: np.ndarray, b1: np.ndarray,
 
 
 def compute_region_affine_3layer(x: np.ndarray, w1: np.ndarray, b1: np.ndarray,
-                                   w2: np.ndarray, b2: np.ndarray,
-                                   w3: np.ndarray, b3: np.ndarray,
-                                   w4: np.ndarray, b4: np.ndarray) -> Tuple:
+                                  w2: np.ndarray, b2: np.ndarray,
+                                  w3: np.ndarray, b3: np.ndarray,
+                                  w4: np.ndarray, b4: np.ndarray) -> Tuple:
     """
     Compute region-specific affine map for 3 hidden layer network.
+    
+    Args:
+        x: Input vector (d,)
+        w1: First hidden layer weights (h1, d)
+        b1: First hidden layer biases (h1,)
+        w2: Second hidden layer weights (h2, h1)
+        b2: Second hidden layer biases (h2,)
+        w3: Third hidden layer weights (h3, h2)
+        b3: Third hidden layer biases (h3,)
+        w4: Output layer weights (c, h3)
+        b4: Output layer biases (c,)
+        
+    Returns:
+        A_r: Effective weight matrix (c, d)
+        D_r: Effective bias vector (c,)
+        logits: Output logits (c,)
+        pred: Predicted class index
+        c1: First hidden layer neuron contributions (h1,)
+        c2: Second hidden layer neuron contributions (h2,)
+        c3: Third hidden layer neuron contributions (h3,)
+        region_id: Region identifier string
     """
     # First hidden layer
     Z1 = w1.dot(x) + b1
@@ -157,9 +196,9 @@ def compute_region_affine_3layer(x: np.ndarray, w1: np.ndarray, b1: np.ndarray,
     D_r = b4 + W4m.dot(b3) + W4m.dot(W3m).dot(b2) + W4m.dot(W3m).dot(W2m).dot(b1)
     
     # Neuron contributions
-    c1 = H1 * (W2m.T.dot(W3m.T.dot(W4m[pred])))
-    c2 = H2 * (W3m.T.dot(W4m[pred]))
     c3 = H3 * W4m[pred]
+    c2 = H2 * W3m.dot(c3)
+    c1 = H1 * W2m.dot(c2)
     
     # Region ID
     S1_bits = ''.join(str(int(b)) for b in S1)
@@ -228,6 +267,15 @@ def analyze_regions(X: np.ndarray, y: np.ndarray, y_pred: np.ndarray,
     """
     Analyze regions across a dataset.
     
+    Args:
+        X: Input features (N, d)
+        y: True labels (N,)
+        y_pred: Predicted labels (N,)
+        params: Model parameters dictionary
+        feature_names: List of feature names
+        class_names: List of class names
+        num_layers: Number of hidden layers
+        
     Returns:
         Dictionary with region statistics and feature profiles
     """
@@ -307,4 +355,3 @@ def analyze_regions(X: np.ndarray, y: np.ndarray, y_pred: np.ndarray,
         'region_stats': region_stats_df,
         'n_unique_regions': len(regions)
     }
-

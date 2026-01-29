@@ -37,9 +37,16 @@ ENV/
 trained_*.pth
 trained_*.pt
 
-# Jupyter Notebook
+# Jupyter Notebook (excluded from repo; only Project Structure + CSVs are pushed)
 .ipynb_checkpoints
 *.ipynb_checkpoints/
+*.ipynb
+
+# Other data files (not in Project Structure; only CSVs are included)
+seeds_dataset.txt
+spambase.data
+spambase.DOCUMENTATION
+spambase.names
 
 # IDE
 .vscode/

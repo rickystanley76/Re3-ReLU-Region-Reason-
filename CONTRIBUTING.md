@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to the Re3 project! This document provides guidelines and instructions for contributing.
 
+**Note**: This application is developed by Ricky Stanley D Cruze (AFRY Digital Solutions AB) and is based on the research paper "Mechanistic Interpretability of ReLU Neural Networks Through Piecewise-Affine Mapping" by Arnab Barua et al. (Mälardalen University).
+
 ## Code of Conduct
 
 - Be respectful and inclusive
@@ -56,7 +58,7 @@ Feature suggestions are welcome! Please create an issue with:
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Re3-ReLU-Region-Reason.git
+   git clone https://github.com/rickystanley76/Re3-ReLU-Region-Reason.git
    cd Re3-ReLU-Region-Reason
    ```
 
@@ -140,10 +142,11 @@ class_names with sparse class indices.
 ├── quick_start.py           # Model training script
 ├── requirments.txt          # Python dependencies
 ├── .gitignore              # Git ignore rules
+├── README.md               # Project overview
 ├── APP_README.md           # Application documentation
 ├── QUICK_START_GUIDE.md    # Quick start guide
 ├── CONTRIBUTING.md         # This file
-└── README.md               # Project overview
+└── [datasets]              # Dataset files
 ```
 
 ## Areas for Contribution
@@ -163,8 +166,11 @@ We welcome contributions in these areas:
 If you have questions:
 
 - Open an issue for discussion
-- Contact: arnab.barua@mdu.se
+- **Application Development**: Contact rickystanley.dcruze@afry.com (Application Developer)
+- **Research Questions**: Contact arnab.barua@mdu.se (Research Lead)
 - Check existing issues and discussions
+
+**Note**: This application is developed by Ricky Stanley D Cruze and is based on the research paper by Arnab Barua et al.
 
 ## License
 

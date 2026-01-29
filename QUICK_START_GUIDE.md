@@ -40,15 +40,99 @@ Train a model using the quick start script:
 python quick_start.py
 ```
 
-This interactive script allows you to:
-- Train models on **Iris** dataset → saves `trained_iris_model_full.pth` and `trained_iris_model.pth`
-- Train models on **Accelerometer/Gyro** dataset → saves `trained_accelerometer_model_full.pth` and `trained_accelerometer_model.pth`
-- Train models on **Diabetes** dataset → saves `trained_diabetes_model_full.pth` and `trained_diabetes_model.pth`
-- Train all datasets at once by selecting 'all'
+#### What `quick_start.py` Does
 
-The script will show test accuracy for each trained model.
+The `quick_start.py` script is a comprehensive model training utility that:
 
-**Alternative**: You can also train models using the Jupyter notebooks (`re3_1_layer.ipynb`, etc.)
+1. **Loads Datasets**: Automatically loads and preprocesses three different datasets:
+   - **Iris Dataset** (`iris_training_set.csv`): 4 features (sepal length, sepal width, petal length, petal width), 3 classes (Setosa, Versicolor, Virginica)
+   - **Accelerometer/Gyro Dataset** (`accelerometer_Training_set.csv`): 6 features (accX, accY, accZ, gyroX, gyroY, gyroZ), multiple activity classes
+   - **Diabetes Dataset** (`diabetes_Training_set.csv`): 21 features, 2 classes (binary classification)
+
+2. **Handles Data Formats**: 
+   - Automatically detects CSV delimiters (handles both comma and semicolon-separated files)
+   - Drops non-numeric columns (e.g., timestamp columns)
+   - Encodes categorical labels automatically
+   - Handles missing values and data type conversions
+
+3. **Creates Neural Network Models**:
+   - **Iris**: 1 hidden layer with 8 neurons
+   - **Accelerometer**: 1 hidden layer with 16 neurons
+   - **Diabetes**: 2 hidden layers with 32 neurons each
+   - All models use ReLU activations (required for Re3 interpretability)
+
+4. **Trains Models**:
+   - Uses Adam optimizer with learning rate 0.01
+   - Splits data into 80% training and 20% testing
+   - Scales features using StandardScaler
+   - Trains for configurable epochs (100 for Iris/Accelerometer, 50 for Diabetes)
+   - Displays training progress and test accuracy
+
+5. **Saves Models**:
+   - Saves two versions of each model:
+     - `trained_*_model.pth`: State dictionary only (weights and biases)
+     - `trained_*_model_full.pth`: Complete model with architecture (recommended for app use)
+
+#### Interactive Usage
+
+When you run the script, you'll see:
+
+```
+============================================================
+Re3 Quick Start - Model Training
+============================================================
+
+Available datasets:
+1. Iris (iris_training_set.csv)
+2. Accelerometer/Gyro Mobile Phone (accelerometer_Training_set.csv)
+3. Diabetes Binary Health Indicators (diabetes_training_set.csv)
+
+============================================================
+
+Select dataset (1-3) or 'all' to train all: 
+```
+
+**Options**:
+- Enter `1`, `2`, or `3` to train a specific dataset
+- Enter `all` to train all three datasets sequentially
+
+**Output**: The script will display:
+- Dataset loading progress
+- Model architecture details
+- Training progress (loss every 20 epochs)
+- Final test accuracy
+- File paths where models are saved
+
+**Alternative**: You can also train models using the Jupyter notebooks (`re3_1_layer.ipynb`, `re3_2_layers.ipynb`, `re3_3_layers.ipynb`)
+
+#### Technical Details of `quick_start.py`
+
+The script is organized into several key functions:
+
+**Data Loading Functions**:
+- `_read_csv_auto()`: Automatically detects CSV delimiters (handles both `,` and `;` separators)
+- `load_iris_dataset()`: Loads Iris dataset, encodes labels, returns features and targets
+- `load_accelerometer_dataset()`: Loads accelerometer data, drops timestamp column, handles numeric conversion
+- `load_diabetes_dataset()`: Loads diabetes dataset, handles binary classification setup
+
+**Model Functions**:
+- `create_model()`: Creates PyTorch Sequential model with ReLU activations
+- `train_model()`: Trains model using Adam optimizer and CrossEntropyLoss
+
+**Main Workflow**:
+1. User selects dataset(s) to train
+2. Script loads dataset using appropriate loader function
+3. Data is split (80% train, 20% test) and scaled
+4. Model architecture is created based on dataset configuration
+5. Model is trained with progress updates
+6. Two model files are saved:
+   - State dict only (for loading into pre-defined architectures)
+   - Full model (includes architecture - recommended for app)
+
+**Error Handling**:
+- Handles missing dataset files gracefully
+- Provides clear error messages
+- Continues with other datasets if one fails (when using 'all' option)
 
 ### Step 3: Launch the Application
 
@@ -75,23 +159,22 @@ After running `quick_start.py`, you'll have the following model files available:
 ### Loading a Model
 
 1. In the sidebar, under "1. Load Model"
-2. Choose one of:
-   - **Upload Model File**: Upload one of the trained models:
-     - `trained_iris_model_full.pth` (for Iris dataset)
-     - `trained_accelerometer_model_full.pth` (for Accelerometer/Gyro dataset)
-     - `trained_diabetes_model_full.pth` (for Diabetes dataset)
-     - Or upload your own model
-   - **Create New Model**: Configure architecture manually
+2. **Upload Model File**: Upload one of the trained models:
+   - `trained_iris_model_full.pth` (for Iris dataset)
+   - `trained_accelerometer_model_full.pth` (for Accelerometer/Gyro dataset)
+   - `trained_diabetes_model_full.pth` (for Diabetes dataset)
+   - Or upload your own PyTorch model (.pth, .pt, or .pkl)
 3. Model status will show ✅ when loaded
 
 ### Loading a Dataset
 
 1. In the sidebar, under "2. Load Dataset"
-2. Choose one of:
-   - **Upload Dataset**: Upload your CSV/TXT file
-   - **Use Built-in**: Select Iris, Seeds, or Spambase
-3. If uploading, select the target column
+2. **Upload Dataset**: Upload your CSV/TXT file
+   - The app automatically detects delimiters (comma or semicolon)
+   - Non-numeric columns (like timestamps) are automatically excluded
+3. Select the target column from the dropdown
 4. Click "Prepare Dataset"
+5. **Note**: The app uses 100% of your uploaded dataset for analysis (no train/test split for interpretation)
 
 ### Analyzing Samples
 
@@ -108,10 +191,12 @@ After running `quick_start.py`, you'll have the following model files available:
 1. Go to **"📈 Region Analysis"** tab
 2. Click **"Analyze All Regions"**
 3. Explore:
-   - How many unique regions exist
-   - Region purity and accuracy
-   - Region size distribution
-   - Quality analysis plots
+   - Summary metrics (unique regions, average purity, average accuracy, total samples)
+   - Region statistics table with detailed metrics
+   - **Sankey Diagram**: Multi-layer flow visualization
+     - For 1-layer models: Shows Regions → Classes flow
+     - For 2-layer models: Shows Features → L1 Regions → L2 Regions → Classes flow
+   - AI-powered explanations of region patterns
 
 ## 🎯 Example Workflow
 
@@ -131,13 +216,12 @@ streamlit run app.py
 Then in the app:
 
 1. **Load Model**: 
-   - Select "Upload Model File"
    - Upload `trained_iris_model_full.pth`
 
 2. **Load Dataset**:
-   - Select "Use Built-in"
-   - Choose "Iris"
-   - Click "Load Built-in Dataset"
+   - Upload `iris_training_set.csv` (or `iris_test.csv`)
+   - Select "variety" as the target column
+   - Click "Prepare Dataset"
 
 3. **Analyze**:
    - Go to "Single Sample Analysis"
@@ -165,11 +249,9 @@ streamlit run app.py
 Then in the app:
 
 1. **Load Model**: 
-   - Select "Upload Model File"
    - Upload `trained_accelerometer_model_full.pth`
 
 2. **Load Dataset**:
-   - Select "Upload Dataset"
    - Upload `accelerometer_gyro_mobile_phone_dataset.csv`
    - Select "Activity" as the target column
    - Click "Prepare Dataset"
@@ -192,11 +274,9 @@ streamlit run app.py
 Then in the app:
 
 1. **Load Model**: 
-   - Select "Upload Model File"
    - Upload `trained_diabetes_model_full.pth`
 
 2. **Load Dataset**:
-   - Select "Upload Dataset"
    - Upload `diabetes_binary_health_indicators_BRFSS2015.csv`
    - Select "Diabetes_binary" as the target column
    - Click "Prepare Dataset"
@@ -240,7 +320,8 @@ Then in the app:
 
 - Check `APP_README.md` for detailed documentation
 - Review the Jupyter notebooks for understanding the Re3 method
-- Contact: arnab.barua@mdu.se
+- **Application Issues**: Contact rickystanley.dcruze@afry.com (Application Developer)
+- **Research Questions**: Contact arnab.barua@mdu.se (Research Lead)
 
 ---
 
@@ -299,14 +380,64 @@ cat .gitignore
 
 **Important**: The `.gitignore` file excludes:
 - Trained model files (`*.pth`, `*.pt`) - these are large and should not be in git
-- Python cache files
-- Virtual environments
-- IDE-specific files
-- Large dataset files (uncomment if you don't want to track them)
+- Python cache files, virtual environments, IDE-specific files
+- Jupyter notebooks (`*.ipynb`), `seeds_dataset.txt`, `spambase.*` (only Project Structure + CSVs are tracked)
+- `.env` (never commit API keys)
+
+#### Uploading Only Project Structure Files and CSVs
+
+If you want to push **only** the files listed in the [Project Structure](README.md#-project-structure) in README.md **plus** your CSV dataset files, use the following.
+
+**Files to include:**
+
+| Category | Files |
+|----------|--------|
+| **Project structure** | `app.py`, `re3_core.py`, `quick_start.py`, `requirments.txt`, `.gitignore`, `README.md`, `APP_README.md`, `QUICK_START_GUIDE.md`, `CONTRIBUTING.md` |
+| **Optional** | `.env.example` (template for API key; no secrets) |
+| **Datasets (CSVs)** | `iris_training_set.csv`, `iris_test_set.csv`, `accelerometer_Training_set.csv`, `accelerometer_Test_set.csv`, `diabetes_Training_set.csv`, `diabetes_test_set.csv` (or any other `.csv` you use) |
+
+**Method 1 – Add only these files (recommended):**
+
+```bash
+# From your project root (e.g. Re3-working_rd)
+
+# 1. Add Project Structure files
+git add app.py re3_core.py quick_start.py requirments.txt .gitignore
+git add README.md APP_README.md QUICK_START_GUIDE.md CONTRIBUTING.md
+
+# 2. Optional: add .env.example (safe; no secrets)
+git add .env.example
+
+# 3. Add CSV datasets
+git add *.csv
+
+# 4. Check what will be committed
+git status
+
+# 5. Commit
+git commit -m "Initial commit: Re3 app (Project Structure + CSVs)"
+```
+
+**Method 2 – Use .gitignore and add everything else:**
+
+The repo’s `.gitignore` is set up so that `git add .` will **not** add:
+- `*.pth`, `*.pt`, `.env`, notebooks, `seeds_dataset.txt`, `spambase.*`, cache, venv, etc.
+
+So you can also do:
+
+```bash
+git add .
+git status   # Confirm only Project Structure files + CSVs are staged
+git commit -m "Initial commit: Re3 app (Project Structure + CSVs)"
+```
+
+Only the Project Structure files, `.env.example` (if present), and CSV files will be staged; everything else is ignored.
 
 ### Step 4: Initial Commit and Push
 
 ```bash
+# If you used Method 1 above, you already ran git add and git commit.
+# If you use Method 2, stage and commit:
 # Stage all files (except those in .gitignore)
 git add .
 
@@ -357,6 +488,7 @@ git diff
 # Stage specific files
 git add app.py
 git add re3_core.py
+git add quick_start.py
 
 # Or stage all changes
 git add .
@@ -469,7 +601,7 @@ When updating the project, also update documentation:
 
 ```bash
 # After making changes to code
-git add app.py re3_core.py
+git add app.py re3_core.py quick_start.py
 git add APP_README.md QUICK_START_GUIDE.md
 git commit -m "Update app and documentation
 

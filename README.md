@@ -1,134 +1,150 @@
-# Re3: ReLU Region Reason - Implementation Notebooks
+# Re3: ReLU Region Reason - Interactive Interpretability Tool
 
-Jupyter notebooks demonstrating the Re3 method for interpreting ReLU neural networks through piecewise-affine mapping.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-1.9+-orange.svg)](https://pytorch.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io/)
 
-## Overview
+An interactive web application for analyzing and interpreting ReLU neural networks using the Re3 (ReLU Region Reason) method. This tool provides **exact, mathematically-grounded explanations** for neural network predictions through piecewise-affine mapping.
 
-Re3 (ReLU Region Reason) provides exact, deterministic explanations for neural network predictions by exploiting the piecewise-affine structure of ReLU networks. These notebooks demonstrate the method on the Iris dataset with networks of varying depth.
+## 📖 About
 
-## Files
+**Re3 (ReLU Region Reason)** is an interactive interpretability tool for understanding ReLU-based neural networks through piecewise-affine mapping. Unlike approximation methods (LIME, SHAP), Re3 provides **exact explanations** by identifying specific linear regions and computing precise affine transformations.
 
-### Notebooks
-- `re3_1_layer.ipynb` - Re3 analysis on 1-hidden-layer network
-- `re3_2_layers.ipynb` - Re3 analysis on 2-hidden-layer network
-- `re3_3_layers.ipynb` - Re3 analysis on 3-hidden-layer network
+### Key Features
 
-### Datasets
-- `iris` - Iris dataset (used in notebooks)
-- `seeds_dataset` - Seeds dataset
-- `accelerometer_gyro_mobile_phone_dataset` - AGMP dataset
-- `diabetes_binary_health_indicators_BRFSS2015` - CDCDHI dataset
-- `spambase.data` - Spambase dataset
+- 🎯 **Exact Interpretability**: Mathematically exact explanations (no approximations)
+- 🔍 **Single Sample Analysis**: Precise feature-level and neuron-level contributions
+- 📈 **Region Analysis**: Automatic identification and analysis of linear regions
+- 📊 **Interactive Visualizations**: Intuitive plots and charts
+- 🤖 **AI-Powered Explanations**: GPT-4.1 mini explanations via OpenRouter for deeper insights
 
-### Documentation
-- `requirements.txt` - Python dependencies
-- `README.md` - This file
+## 🚀 Quick Start
 
-## Important Note
+### Installation
 
-**The provided notebooks are configured for the Iris dataset only.** To use Re3 with other datasets (Seeds, AGMP, CDCDHI, Spambase), you will need to modify the data loading section in the notebooks to match the specific dataset's structure (number of features, classes, etc.).
-
-
-## Installation
-
-### Prerequisites
-
-- Python 3.8 or higher
-- Jupyter Notebook or JupyterLab
-
-### Install Dependencies
 ```bash
-pip install -r requirements.txt
+# Clone repository
+git clone https://github.com/rickystanley76/Re3-ReLU-Region-Reason.git
+cd Re3-ReLU-Region-Reason
+
+# Install UV (recommended)
+# Windows: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies
+uv pip install -r requirments.txt
+# or: pip install -r requirments.txt
 ```
 
-Or install manually:
+### Usage
+
 ```bash
-pip install pandas numpy torch scikit-learn scipy lime shap matplotlib jupyter
+# Train a model (optional but recommended)
+python quick_start.py
 ```
 
-## Usage
+The `quick_start.py` script provides an interactive way to train ReLU neural network models on three pre-configured datasets:
+- **Iris**: 4 features, 3 classes, 1 hidden layer
+- **Accelerometer/Gyro**: 6 features, multiple classes, 1 hidden layer  
+- **Diabetes**: 21 features, 2 classes (binary), 2 hidden layers
 
-### Quick Start (Iris Dataset)
+The script automatically:
+- Loads and preprocesses datasets (handles various CSV formats)
+- Creates appropriately-sized neural network architectures
+- Trains models with optimal hyperparameters
+- Saves models in two formats (state dict and full model)
+- Displays training progress and test accuracy
 
-1. Install dependencies (see above)
-
-2. Launch Jupyter:
 ```bash
-   jupyter notebook
+# Launch the application
+streamlit run app.py
 ```
 
-3. Open any notebook:
-   - `re3_1_layer.ipynb` for 1 hidden layer example
-   - `re3_2_layers.ipynb` for 2 hidden layers example
-   - `re3_3_layers.ipynb` for 3 hidden layers example
+The app will open at `http://localhost:8501`
 
-4. Run all cells to see complete Re3 analysis
-
-### Using Other Datasets
-
-To adapt the notebooks for other datasets:
-
-1. Modify the data loading section:
-```python
-   # Change from:
-   data = pd.read_csv('iris.csv')
+**Optional**: For AI-powered explanations, create a `.env` file with your OpenRouter API key:
+```bash
+OPENROUTER_API_KEY=your_api_key_here
 ```
+Get your API key from [OpenRouter](https://openrouter.ai/keys)
 
-2. Update dataset-specific parameters:
-   - Number of input features
-   - Number of output classes
-   - Feature names
-   - Class names
+## 📄 Research Paper
 
-3. Adjust network architecture if needed based on dataset complexity
+This application is **based on** the research paper:
 
-## What the Notebooks Demonstrate
+**"Mechanistic Interpretability of ReLU Neural Networks Through Piecewise-Affine Mapping"**
 
-- Model training on Iris dataset
-- Region identification and analysis
-- Visualization of results
+- **Authors**: Arnab Barua, Mobyen Uddin Ahmed, Shahina Begum
+- **Journal**: Machine Learning (Springer)
+- **DOI**: [10.1007/s10994-025-06957-0](https://link.springer.com/article/10.1007/s10994-025-06957-0)
 
-## Requirements
+### Citation
 
-- pandas >= 1.3.0
-- numpy >= 1.21.0
-- PyTorch >= 1.9.0
-- scikit-learn >= 0.24.0
-- scipy >= 1.7.0
-- lime >= 0.2.0
-- shap >= 0.40.0
-- matplotlib >= 3.4.0
-- jupyter >= 1.0.0
-
-## License
-
-This code is provided for academic and research purposes. If you use this code in your work, please cite the paper below.
-
-## Citation
-
-If you use this code in your research, please cite:
 ```bibtex
 @article{barua2025re3,
   title={Mechanistic Interpretability of ReLU Neural Networks Through Piecewise-Affine Mapping},
   author={Barua, Arnab and Ahmed, Mobyen Uddin and Begum, Shahina},
   journal={Machine Learning},
   year={2025},
-  note={Under review}
+  doi={10.1007/s10994-025-06957-0}
 }
 ```
 
-## Contact
+## 👥 Credits
 
-For questions or issues:
-- Email: arnab.barua@mdu.se
-- Institution: Mälardalen University, Sweden
+### Application Developer
 
-## Acknowledgments
+**Ricky Stanley D Cruze**
+- **Email**: rickystanley.dcruze@afry.com
+- **Institution**: AFRY Digital Solutions AB, Västerås, Sweden
+- **Role**: Application Developer
 
-This work was conducted at the School of Innovation, Design and Engineering, Mälardalen University, Sweden.
+### Research Team
 
-## Related Publication
+**Arnab Barua** (Research Lead & Paper Author)
+- **Email**: arnab.barua@mdu.se
+- **Institution**: Mälardalen University, Sweden
 
-Barua, A., Ahmed, M. U., & Begum, S. (2025). Mechanistic Interpretability of ReLU Neural Networks Through Piecewise-Affine Mapping. *Machine Learning* (under review).
+**Mobyen Uddin Ahmed** & **Shahina Begum** (Co-authors)
+- **Institution**: Mälardalen University, Sweden
 
-DOI: [Will add Upon Publishing]
+## 📚 Documentation
+
+- **[QUICK_START_GUIDE.md](QUICK_START_GUIDE.md)**: Detailed installation and usage guide
+- **[APP_README.md](APP_README.md)**: Comprehensive application documentation
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: Contribution guidelines
+
+## 📁 Project Structure
+
+Only these files (and your CSV datasets) are intended to be in the repository:
+
+```
+Re3-ReLU-Region-Reason/
+├── app.py                          # Main Streamlit application
+├── re3_core.py                     # Core Re3 computation functions
+├── quick_start.py                  # Model training script
+├── requirments.txt                 # Python dependencies
+├── .gitignore                      # Git ignore rules
+├── README.md                       # This file
+├── APP_README.md                   # Application documentation
+├── QUICK_START_GUIDE.md            # Quick start guide
+├── CONTRIBUTING.md                 # Contribution guidelines
+└── [datasets]                      # CSV dataset files (e.g. iris_training_set.csv, *.csv)
+```
+
+**Uploading to GitHub:** To push only the Project Structure files and CSVs, see **"Uploading Only Project Structure Files and CSVs"** in [QUICK_START_GUIDE.md](QUICK_START_GUIDE.md) (under Publishing to GitHub).
+
+## 📧 Contact
+
+- **Application Issues**: rickystanley.dcruze@afry.com
+- **Research Questions**: arnab.barua@mdu.se
+
+## 📝 License
+
+This code is provided for academic and research purposes.
+
+---
+
+**Re3: ReLU Region Reason** - Making Neural Networks Transparent, One Region at a Time
+
+*Application developed by Ricky Stanley D Cruze (AFRY) | Based on research by Arnab Barua et al. (Mälardalen University)*

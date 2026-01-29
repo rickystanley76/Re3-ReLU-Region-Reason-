@@ -10,11 +10,15 @@ import torch
 import torch.nn as nn
 import pickle
 import io
+import os
 from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
+from dotenv import load_dotenv
+from openai import OpenAI
 
 from re3_core import (
     extract_model_parameters,
@@ -24,6 +28,61 @@ from re3_core import (
     explain_region,
     analyze_regions
 )
+
+# Load environment variables
+load_dotenv()
+
+# Initialize OpenAI client for OpenRouter
+def get_openrouter_client():
+    """Initialize OpenRouter client with API key from environment."""
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        return None
+    
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+def get_llm_explanation(prompt: str, context: str = "") -> str:
+    """
+    Get explanation from GPT-4.1 mini via OpenRouter.
+    
+    Args:
+        prompt: The main prompt/question
+        context: Additional context information
+        
+    Returns:
+        Explanation text from LLM
+    """
+    client = get_openrouter_client()
+    if client is None:
+        return "⚠️ OpenRouter API key not configured. Please set OPENROUTER_API_KEY in your .env file."
+    
+    try:
+        model = os.getenv('OPENROUTER_MODEL', 'openai/gpt-4.1-mini')
+        
+        full_prompt = f"{context}\n\n{prompt}" if context else prompt
+        
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert in neural network interpretability and explainable AI. Provide detailed, clear, concise, and technical explanations about ReLU neural networks and their interpretability."
+                },
+                {
+                    "role": "user",
+                    "content": full_prompt
+                }
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"⚠️ Error getting LLM explanation: {str(e)}"
 
 # Page configuration
 st.set_page_config(
@@ -134,10 +193,18 @@ def create_model_from_config(input_size, hidden_sizes, output_size, num_layers):
 
 
 def load_dataset(file_path, file_type='csv'):
-    """Load dataset from file."""
+    """Load dataset from file.
+
+    Notes:
+    - Many of the provided example datasets are **semicolon-delimited** (`;`)
+      even though they use a `.csv` extension.
+    - To make uploads robust, we let pandas **auto-detect** the delimiter
+      using `sep=None` with the Python engine.
+    """
     try:
         if file_type == 'csv':
-            df = pd.read_csv(file_path)
+            # Robust delimiter detection (handles ',' and ';')
+            df = pd.read_csv(file_path, sep=None, engine='python')
         elif file_type == 'txt':
             # Try whitespace separator (handles tabs and spaces, including inconsistent fields)
             try:
@@ -208,21 +275,16 @@ def prepare_data(df, target_column=None):
     # Get feature names (only numeric columns)
     feature_names = numeric_columns
     
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    # Scale features
+    # Use all data for analysis (no train/test split needed for interpretation)
+    # Scale features using all data
     scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    X_scaled = scaler.fit_transform(X)
     
     return {
-        'X_train': X_train_scaled,
-        'X_test': X_test_scaled,
-        'y_train': y_train,
-        'y_test': y_test,
+        'X_train': X_scaled,  # Keep for compatibility, but contains all data
+        'X_test': X_scaled,   # Use all data for analysis
+        'y_train': y,         # Keep for compatibility, but contains all data
+        'y_test': y,          # Use all data for analysis
         'feature_names': feature_names,
         'class_names': class_names,
         'scaler': scaler,
@@ -240,133 +302,57 @@ with st.sidebar:
     
     # Model loading section
     st.subheader("1. Load Model")
-    model_option = st.radio(
-        "Model Source",
-        ["Upload Model File", "Create New Model", "Use Pre-trained"],
-        key="model_option"
+    uploaded_model = st.file_uploader(
+        "Upload PyTorch Model (.pth, .pt, .pkl)",
+        type=['pth', 'pt', 'pkl'],
+        key="model_upload"
     )
     
-    if model_option == "Upload Model File":
-        uploaded_model = st.file_uploader(
-            "Upload PyTorch Model (.pth, .pt, .pkl)",
-            type=['pth', 'pt', 'pkl'],
-            key="model_upload"
-        )
-        
-        if uploaded_model:
-            model, state_dict = load_model(uploaded_model)
-            if model:
-                st.session_state.model = model
-                st.session_state.model_params = extract_model_parameters(model)
-                st.success("✅ Model loaded successfully!")
-            elif state_dict:
-                st.info("💡 State dict loaded. Use 'Create New Model' with matching architecture, then the state dict will be applied automatically.")
-                st.session_state.model_state_dict = state_dict
-    
-    elif model_option == "Create New Model":
-        st.info("Configure model architecture:")
-        input_size = st.number_input("Input Size", min_value=1, value=4, step=1)
-        num_layers = st.number_input("Number of Hidden Layers", min_value=1, max_value=3, value=1, step=1)
-        
-        hidden_sizes = []
-        for i in range(num_layers):
-            size = st.number_input(f"Hidden Layer {i+1} Size", min_value=1, value=8, step=1, key=f"hidden_{i}")
-            hidden_sizes.append(size)
-        
-        output_size = st.number_input("Output Size (Classes)", min_value=2, value=3, step=1)
-        
-        if st.button("Create Model"):
-            model = create_model_from_config(input_size, hidden_sizes, output_size, num_layers)
-            
-            # If we have a state dict, try to load it
-            if 'model_state_dict' in st.session_state:
-                try:
-                    model.load_state_dict(st.session_state.model_state_dict)
-                    st.success("✅ Model created and loaded with saved weights!")
-                except Exception as e:
-                    st.warning(f"⚠️ Could not load state dict: {str(e)}. Using random initialization.")
-                    st.success("✅ Model created with random weights!")
-            else:
-                st.success("✅ Model created with random weights!")
-            
+    if uploaded_model:
+        model, state_dict = load_model(uploaded_model)
+        if model:
             st.session_state.model = model
             st.session_state.model_params = extract_model_parameters(model)
+            st.success("✅ Model loaded successfully!")
+        elif state_dict:
+            st.warning("⚠️ State dict detected. Please upload a full model file (.pth with complete architecture).")
+            st.session_state.model_state_dict = state_dict
     
     # Dataset loading section
     st.subheader("2. Load Dataset")
-    dataset_option = st.radio(
-        "Dataset Source",
-        ["Upload Dataset", "Use Built-in"],
-        key="dataset_option"
+    uploaded_dataset = st.file_uploader(
+        "Upload Dataset (.csv, .txt)",
+        type=['csv', 'txt'],
+        key="dataset_upload"
     )
     
-    if dataset_option == "Upload Dataset":
-        uploaded_dataset = st.file_uploader(
-            "Upload Dataset (.csv, .txt)",
-            type=['csv', 'txt'],
-            key="dataset_upload"
-        )
+    if uploaded_dataset:
+        file_type = 'csv' if uploaded_dataset.name.endswith('.csv') else 'txt'
+        df = load_dataset(uploaded_dataset, file_type)
         
-        if uploaded_dataset:
-            file_type = 'csv' if uploaded_dataset.name.endswith('.csv') else 'txt'
-            df = load_dataset(uploaded_dataset, file_type)
+        if df is not None:
+            st.session_state.dataset = df
+            st.dataframe(df.head(), width='stretch')
             
-            if df is not None:
-                st.session_state.dataset = df
-                st.dataframe(df.head(), width='stretch')
-                
-                # Target column selection
-                target_col = st.selectbox(
-                    "Select Target Column",
-                    df.columns.tolist(),
-                    index=len(df.columns)-1
-                )
-                
-                if st.button("Prepare Dataset"):
-                    data_prep = prepare_data(df, target_col)
-                    if data_prep is not None:
-                        st.session_state.X_test = data_prep['X_test']
-                        st.session_state.y_test = data_prep['y_test']
-                        st.session_state.feature_names = data_prep['feature_names']
-                        st.session_state.class_names = data_prep['class_names']
-                        st.session_state.scaler = data_prep['scaler']
-                        st.session_state.label_encoder = data_prep['label_encoder']
-                        st.success("✅ Dataset prepared!")
-                    else:
-                        st.error("❌ Failed to prepare dataset. Please check your data.")
-    
-    elif dataset_option == "Use Built-in":
-        builtin_datasets = {
-            "Iris": "iris.csv",
-            "Seeds": "seeds_dataset.txt",
-            "Spambase": "spambase.data"
-        }
-        
-        selected_dataset = st.selectbox("Select Dataset", list(builtin_datasets.keys()))
-        
-        if st.button("Load Built-in Dataset"):
-            dataset_path = builtin_datasets[selected_dataset]
-            if Path(dataset_path).exists():
-                if selected_dataset == "Iris":
-                    df = pd.read_csv(dataset_path)
-                    data_prep = prepare_data(df, 'variety')
-                elif selected_dataset == "Seeds":
-                    # Handle inconsistent field counts by using whitespace separator
-                    df = pd.read_csv(dataset_path, sep='\s+', header=None, engine='python')
-                    # Last column is class (1-3)
-                    df.columns = [f'Feature_{i+1}' for i in range(7)] + ['Class']
-                    data_prep = prepare_data(df, 'Class')
-                else:  # Spambase
-                    df = pd.read_csv(dataset_path, header=None)
-                    df.columns = [f'Feature_{i+1}' for i in range(57)] + ['Class']
-                    data_prep = prepare_data(df, 'Class')
-                
-                st.session_state.X_test = data_prep['X_test']
-                st.session_state.y_test = data_prep['y_test']
-                st.session_state.feature_names = data_prep['feature_names']
-                st.session_state.class_names = data_prep['class_names']
-                st.session_state.scaler = data_prep['scaler']
-                st.success("✅ Dataset loaded!")
+            # Target column selection
+            target_col = st.selectbox(
+                "Select Target Column",
+                df.columns.tolist(),
+                index=len(df.columns)-1
+            )
+            
+            if st.button("Prepare Dataset"):
+                data_prep = prepare_data(df, target_col)
+                if data_prep is not None:
+                    st.session_state.X_test = data_prep['X_test']
+                    st.session_state.y_test = data_prep['y_test']
+                    st.session_state.feature_names = data_prep['feature_names']
+                    st.session_state.class_names = data_prep['class_names']
+                    st.session_state.scaler = data_prep['scaler']
+                    st.session_state.label_encoder = data_prep['label_encoder']
+                    st.success("✅ Dataset prepared!")
+                else:
+                    st.error("❌ Failed to prepare dataset. Please check your data.")
 
 
 # Main content area
@@ -508,6 +494,19 @@ with tab2:
         from scipy.special import softmax
         probs = softmax(logits)
         
+        # Store in session state for AI explanation
+        st.session_state.current_sample_data = {
+            'x': x,
+            'y_true': y_true,
+            'pred': pred,
+            'logits': logits,
+            'probs': probs,
+            'region_id': region_id,
+            'neuron_contribs': neuron_contribs,
+            'A_r': A_r,
+            'D_r': D_r
+        }
+        
         # Display results
         col1, col2, col3 = st.columns(3)
         
@@ -631,6 +630,115 @@ with tab2:
             ax.tick_params(axis='x', rotation=45)
             plt.tight_layout()
             st.pyplot(fig)
+        
+        # LLM Explanation Section
+        st.markdown("---")
+        st.subheader("🤖 AI Explanation")
+        
+        if st.button("Get AI Explanation", key="explain_sample"):
+            try:
+                with st.spinner("Generating explanation..."):
+                    # Check if sample data exists
+                    if 'current_sample_data' not in st.session_state:
+                        st.error("⚠️ Please select a sample first to generate analysis data.")
+                        st.stop()
+                    
+                    sample_data = st.session_state.current_sample_data
+                    
+                    # Recompute feature contributions if needed
+                    df_exp = explain_region(
+                        sample_data['x'], 
+                        sample_data['A_r'], 
+                        sample_data['D_r'], 
+                        sample_data['logits'], 
+                        sample_data['pred'],
+                        st.session_state.feature_names,
+                        st.session_state.class_names
+                    )
+                    df_exp_sorted = df_exp.sort_values('ProbContribution', key=abs, ascending=False)
+                    
+                    # Prepare context for LLM
+                    top_features = df_exp_sorted.head(5)
+                    top_features_str = "\n".join([
+                        f"- {row['Feature']}: {row['ProbContribution']:.4f} (contribution to probability)"
+                        for _, row in top_features.iterrows()
+                    ])
+                    
+                    # Get neuron contributions
+                    top_neurons = []
+                    neuron_contribs = sample_data['neuron_contribs']
+                    for layer_name, contribs in neuron_contribs.items():
+                        if len(contribs) > 0:
+                            df_neurons = pd.DataFrame({
+                                'Neuron': [f'Neuron {i+1}' for i in range(len(contribs))],
+                                'Contribution': contribs
+                            }).sort_values('Contribution', key=abs, ascending=False)
+                            top_neurons.append(f"{layer_name}: {df_neurons.iloc[0]['Neuron']} (contribution: {df_neurons.iloc[0]['Contribution']:.4f})")
+                    
+                    # Get labels
+                    y_true_int = int(sample_data['y_true']) if isinstance(sample_data['y_true'], (np.floating, np.integer)) else sample_data['y_true']
+                    pred_int = int(sample_data['pred']) if isinstance(sample_data['pred'], (np.floating, np.integer)) else sample_data['pred']
+                    
+                    if 0 <= y_true_int < len(st.session_state.class_names):
+                        true_label = st.session_state.class_names[y_true_int]
+                    else:
+                        true_label = f"Class_{y_true_int}"
+                    
+                    if 0 <= pred_int < len(st.session_state.class_names):
+                        pred_label = st.session_state.class_names[pred_int]
+                    else:
+                        pred_label = f"Class_{pred_int}"
+                    
+                    # Get confidence
+                    if 0 <= pred_int < len(sample_data['probs']):
+                        confidence = f"{sample_data['probs'][pred_int]:.2%}"
+                    else:
+                        confidence = "N/A"
+                    
+                    # Get class names for probabilities
+                    num_output_classes = len(sample_data['probs'])
+                    if len(st.session_state.class_names) < num_output_classes:
+                        extended_class_names = list(st.session_state.class_names)
+                        for i in range(len(st.session_state.class_names), num_output_classes):
+                            extended_class_names.append(f'Class_{i}')
+                        class_names_for_probs = extended_class_names
+                    elif len(st.session_state.class_names) > num_output_classes:
+                        class_names_for_probs = st.session_state.class_names[:num_output_classes]
+                    else:
+                        class_names_for_probs = st.session_state.class_names
+                    
+                    # Build context
+                    prob_str = ', '.join([f'{cls}: {prob:.2%}' for cls, prob in zip(class_names_for_probs, sample_data['probs'])])
+                    
+                    context = f"""
+Sample Analysis Context:
+- True Label: {true_label}
+- Predicted Label: {pred_label}
+- Confidence: {confidence}
+- Region ID: {sample_data['region_id']}
+- Top Contributing Features:
+{top_features_str}
+- Top Contributing Neurons:
+{chr(10).join(top_neurons) if top_neurons else 'N/A'}
+- Class Probabilities: {prob_str}
+"""
+                    
+                    prompt = f"""
+Explain this neural network prediction in simple terms:
+1. Why did the model predict "{pred_label}" instead of "{true_label}"?
+2. Which features were most important for this prediction and why?
+3. What does the region ID "{sample_data['region_id']}" tell us about how the model processed this input?
+4. How do the neuron contributions help us understand the model's decision-making process?
+"""
+                    
+                    explanation = get_llm_explanation(prompt, context)
+                    st.markdown(explanation)
+            except KeyError as e:
+                st.error(f"⚠️ Error: Missing data. Please ensure you've selected a sample and the analysis has completed. Error: {str(e)}")
+            except Exception as e:
+                st.error(f"⚠️ Error generating explanation: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
 
 
 with tab3:
@@ -696,27 +804,424 @@ with tab3:
             st.subheader("Region Statistics")
             st.dataframe(results['region_stats'], width='stretch')
             
-            # Region size distribution
-            st.subheader("Region Size Distribution")
-            fig, ax = plt.subplots(figsize=(10, 4))
-            ax.hist(results['region_stats']['n_samples'], bins=20, edgecolor='black')
-            ax.set_xlabel('Number of Samples per Region')
-            ax.set_ylabel('Frequency')
-            ax.set_title('Distribution of Region Sizes')
-            st.pyplot(fig)
+            # Sankey diagram showing flow from regions to classes
+            st.subheader("Region to Class Flow (Sankey Diagram)")
             
-            # Purity vs Accuracy scatter
-            st.subheader("Region Purity vs Accuracy")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.scatter(results['region_stats']['purity'], 
-                      results['region_stats']['accuracy'],
-                      s=results['region_stats']['n_samples']*10,
-                      alpha=0.6)
-            ax.set_xlabel('Purity')
-            ax.set_ylabel('Accuracy')
-            ax.set_title('Region Quality Analysis')
-            ax.grid(True, alpha=0.3)
-            st.pyplot(fig)
+            # Prepare data for Sankey diagram
+            region_stats_df = results['region_stats'].copy()
+            
+            # Get number of layers from model params
+            params = st.session_state.model_params
+            num_layers = params.get('num_layers', 1)
+            
+            # Parse region_id to extract layer information
+            def parse_region_id(rid):
+                """Parse region_id to extract L1 and L2 components."""
+                if isinstance(rid, str):
+                    # Check if it's a 2-layer format: "L1:11110000_L2:00110011"
+                    if '_L2:' in rid:
+                        parts = rid.split('_L2:')
+                        l1_part = parts[0].replace('L1:', '')
+                        l2_part = parts[1]
+                        return {'l1': l1_part, 'l2': l2_part, 'full': rid}
+                    # Check if it's a 1-layer format: "L1:11110000"
+                    elif rid.startswith('L1:'):
+                        l1_part = rid.replace('L1:', '')
+                        return {'l1': l1_part, 'l2': None, 'full': rid}
+                    # Check if it's a 3-layer format: "L1:..._L2:..._L3:..."
+                    elif '_L3:' in rid:
+                        parts = rid.split('_L3:')
+                        l1_l2 = parts[0]
+                        if '_L2:' in l1_l2:
+                            l1_part = l1_l2.split('_L2:')[0].replace('L1:', '')
+                            l2_part = l1_l2.split('_L2:')[1]
+                            l3_part = parts[1]
+                            return {'l1': l1_part, 'l2': l2_part, 'l3': l3_part, 'full': rid}
+                    return {'l1': None, 'l2': None, 'full': rid}
+                else:
+                    return {'l1': None, 'l2': None, 'full': str(rid)}
+            
+            # Check if we have multi-layer region IDs
+            sample_rid = region_stats_df['region_id'].iloc[0] if len(region_stats_df) > 0 else None
+            parsed_sample = parse_region_id(sample_rid) if sample_rid else None
+            has_l2 = parsed_sample and parsed_sample['l2'] is not None
+            
+            # For 2-layer models, create multi-layer Sankey diagram
+            if num_layers == 2 and has_l2:
+                # Parse all region IDs
+                region_stats_df['parsed'] = region_stats_df['region_id'].apply(parse_region_id)
+                
+                # Extract unique L1 and L2 patterns
+                l1_patterns = region_stats_df['parsed'].apply(lambda x: x['l1']).unique()
+                l2_patterns = region_stats_df['parsed'].apply(lambda x: x['l2']).unique()
+                unique_classes = region_stats_df['majority_class'].unique().tolist()
+                unique_classes.sort()
+                
+                # Get feature names
+                feature_names = st.session_state.feature_names if st.session_state.feature_names else [f'Feature_{i+1}' for i in range(len(l1_patterns))]
+                
+                # Create node labels for 4 columns: Features → L1 → L2 → Classes
+                # Column 1: Features
+                feature_nodes = feature_names[:len(feature_names)]  # Use actual feature names
+                
+                # Column 2: L1 regions (format as "L1 nX" where X is index)
+                l1_nodes = [f"L1 n{i+1}" for i in range(len(l1_patterns))]
+                l1_pattern_to_node = {pattern: f"L1 n{i+1}" for i, pattern in enumerate(sorted(l1_patterns))}
+                
+                # Column 3: L2 regions (format as "L2 nX" where X is index)
+                l2_nodes = [f"L2 n{i+1}" for i in range(len(l2_patterns))]
+                l2_pattern_to_node = {pattern: f"L2 n{i+1}" for i, pattern in enumerate(sorted(l2_patterns))}
+                
+                # Column 4: Classes
+                class_nodes = unique_classes
+                
+                # Combine all nodes
+                all_nodes = feature_nodes + l1_nodes + l2_nodes + class_nodes
+                node_indices = {node: idx for idx, node in enumerate(all_nodes)}
+                
+                # Calculate feature contributions to L1 regions
+                # For each L1 pattern, compute which features contribute most
+                # We'll use a heuristic: features with higher variance in L1 activation patterns
+                l1_feature_flows = {}  # {(feature, l1_node): count}
+                l1_l2_flows = {}  # {(l1_node, l2_node): count}
+                l2_class_flows = {}  # {(l2_node, class): count}
+                
+                # Aggregate flows from region_stats
+                for idx, row in region_stats_df.iterrows():
+                    parsed = row['parsed']
+                    l1_pattern = parsed['l1']
+                    l2_pattern = parsed['l2']
+                    class_name = str(row['majority_class'])
+                    n_samples = int(row['n_samples'])
+                    
+                    if l1_pattern and l2_pattern:
+                        l1_node = l1_pattern_to_node[l1_pattern]
+                        l2_node = l2_pattern_to_node[l2_pattern]
+                        
+                        # L1 → L2 flow
+                        key = (l1_node, l2_node)
+                        l1_l2_flows[key] = l1_l2_flows.get(key, 0) + n_samples
+                        
+                        # L2 → Class flow
+                        key = (l2_node, class_name)
+                        l2_class_flows[key] = l2_class_flows.get(key, 0) + n_samples
+                
+                # For Features → L1, compute actual feature contributions
+                # Use the regions dictionary to get sample-level data
+                regions_dict = results.get('regions', {})
+                
+                # Aggregate feature contributions per L1 pattern
+                l1_feature_contributions = {}  # {l1_pattern: {feature_idx: total_contribution}}
+                
+                if regions_dict and st.session_state.X_test is not None:
+                    for region_id, region_data in regions_dict.items():
+                        parsed = parse_region_id(region_id)
+                        if parsed['l1'] and parsed['l2']:
+                            l1_pattern = parsed['l1']
+                            samples = region_data.get('samples', [])
+                            
+                            if l1_pattern not in l1_feature_contributions:
+                                l1_feature_contributions[l1_pattern] = {i: 0.0 for i in range(len(feature_nodes))}
+                            
+                            # For each sample in this region, compute feature contributions
+                            # Use absolute feature values as a proxy for contribution
+                            for sample_idx in samples:
+                                if sample_idx < len(st.session_state.X_test):
+                                    x = st.session_state.X_test[sample_idx]
+                                    # Use absolute values as contribution proxy
+                                    for feat_idx in range(min(len(feature_nodes), len(x))):
+                                        l1_feature_contributions[l1_pattern][feat_idx] += abs(x[feat_idx])
+                
+                # Normalize and create flows
+                for l1_pattern, l1_node in l1_pattern_to_node.items():
+                    # Count samples going through this L1 node
+                    l1_total = sum(v for (l1, l2), v in l1_l2_flows.items() if l1 == l1_node)
+                    
+                    if l1_total > 0:
+                        if l1_pattern in l1_feature_contributions and l1_feature_contributions[l1_pattern]:
+                            # Use actual feature contributions
+                            contributions = l1_feature_contributions[l1_pattern]
+                            total_contrib = sum(contributions.values())
+                            
+                            if total_contrib > 0:
+                                # Distribute based on actual feature contributions
+                                for feat_idx, feature in enumerate(feature_nodes):
+                                    if feat_idx < len(contributions):
+                                        contrib_ratio = contributions[feat_idx] / total_contrib
+                                        flow_value = int(l1_total * contrib_ratio)
+                                        if flow_value > 0:
+                                            key = (feature, l1_node)
+                                            l1_feature_flows[key] = l1_feature_flows.get(key, 0) + flow_value
+                        else:
+                            # Fallback: distribute evenly across features
+                            flow_per_feature = l1_total // len(feature_nodes)
+                            remainder = l1_total % len(feature_nodes)
+                            for feat_idx, feature in enumerate(feature_nodes):
+                                flow_value = flow_per_feature + (1 if feat_idx < remainder else 0)
+                                if flow_value > 0:
+                                    key = (feature, l1_node)
+                                    l1_feature_flows[key] = l1_feature_flows.get(key, 0) + flow_value
+                
+                # Build source, target, value lists
+                source = []
+                target = []
+                value = []
+                
+                # Features → L1 flows
+                for (feat, l1), val in l1_feature_flows.items():
+                    if feat in node_indices and l1 in node_indices and val > 0:
+                        source.append(node_indices[feat])
+                        target.append(node_indices[l1])
+                        value.append(val)
+                
+                # L1 → L2 flows
+                for (l1, l2), val in l1_l2_flows.items():
+                    if l1 in node_indices and l2 in node_indices and val > 0:
+                        source.append(node_indices[l1])
+                        target.append(node_indices[l2])
+                        value.append(val)
+                
+                # L2 → Class flows
+                for (l2, cls), val in l2_class_flows.items():
+                    if l2 in node_indices and cls in node_indices and val > 0:
+                        source.append(node_indices[l2])
+                        target.append(node_indices[cls])
+                        value.append(val)
+                
+                if len(source) == 0:
+                    st.warning("⚠️ No valid flow data available for multi-layer Sankey diagram.")
+                else:
+                    # Color palette
+                    feature_colors = [
+                        "rgba(31, 119, 180, 0.8)",    # Blue
+                        "rgba(255, 127, 14, 0.8)",     # Orange
+                        "rgba(44, 160, 44, 0.8)",      # Green
+                        "rgba(214, 39, 40, 0.8)",      # Red
+                        "rgba(148, 103, 189, 0.8)",     # Purple
+                        "rgba(140, 86, 75, 0.8)",      # Brown
+                    ]
+                    
+                    l1_colors = ["rgba(174, 199, 232, 0.8)"] * len(l1_nodes)  # Light blue
+                    l2_colors = ["rgba(255, 187, 120, 0.8)"] * len(l2_nodes)  # Light orange
+                    
+                    class_colors_palette = [
+                        "rgba(227, 119, 194, 0.8)",    # Pink
+                        "rgba(44, 160, 44, 0.8)",      # Green
+                        "rgba(148, 103, 189, 0.8)",     # Purple
+                        "rgba(255, 127, 14, 0.8)",     # Orange
+                        "rgba(23, 190, 207, 0.8)",     # Cyan
+                    ]
+                    
+                    class_colors = [class_colors_palette[i % len(class_colors_palette)] for i in range(len(class_nodes))]
+                    
+                    node_colors = (
+                        [feature_colors[i % len(feature_colors)] for i in range(len(feature_nodes))] +
+                        l1_colors +
+                        l2_colors +
+                        class_colors
+                    )
+                    
+                    # Create Sankey diagram
+                    fig = go.Figure(data=[go.Sankey(
+                        node=dict(
+                            pad=15,
+                            thickness=20,
+                            line=dict(color="black", width=0.5),
+                            label=all_nodes,
+                            color=node_colors
+                        ),
+                        link=dict(
+                            source=source,
+                            target=target,
+                            value=value,
+                            color="rgba(128, 128, 128, 0.4)"
+                        )
+                    )])
+                    
+                    height = max(500, min(1200, len(all_nodes) * 25))
+                    fig.update_layout(
+                        title_text="Multi-Layer Flow: Features → L1 Regions → L2 Regions → Classes",
+                        font_size=10,
+                        height=height,
+                        width=1400
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption(f"💡 **Legend**: Features (colored) → L1 Regions (light blue) → L2 Regions (light orange) → Classes (colored). Flow width indicates sample count.")
+            
+            else:
+                # Single-layer or simple 2-column diagram
+                def format_region_label(rid):
+                    """Format region ID as a readable label."""
+                    if isinstance(rid, str):
+                        if len(rid) > 30:
+                            return f"R{hash(rid) % 10000}"
+                        return rid
+                    else:
+                        try:
+                            return f"Region {int(rid)}"
+                        except (ValueError, TypeError):
+                            return str(rid)
+                
+                region_labels = [format_region_label(rid) for rid in region_stats_df['region_id']]
+                unique_classes = region_stats_df['majority_class'].unique().tolist()
+                unique_classes.sort()
+                
+                all_nodes = region_labels + unique_classes
+                node_indices = {node: idx for idx, node in enumerate(all_nodes)}
+                
+                source = []
+                target = []
+                value = []
+                
+                for idx, row in region_stats_df.iterrows():
+                    region_node = format_region_label(row['region_id'])
+                    class_node = str(row['majority_class'])
+                    n_samples = int(row['n_samples'])
+                    
+                    if n_samples > 0 and region_node in node_indices and class_node in node_indices:
+                        source.append(node_indices[region_node])
+                        target.append(node_indices[class_node])
+                        value.append(n_samples)
+                
+                if len(source) == 0:
+                    st.warning("⚠️ No valid flow data available for Sankey diagram.")
+                else:
+                    class_colors = [
+                        "rgba(31, 119, 180, 0.8)", "rgba(255, 127, 14, 0.8)", "rgba(44, 160, 44, 0.8)",
+                        "rgba(214, 39, 40, 0.8)", "rgba(148, 103, 189, 0.8)", "rgba(140, 86, 75, 0.8)",
+                        "rgba(227, 119, 194, 0.8)", "rgba(127, 127, 127, 0.8)", "rgba(188, 189, 34, 0.8)",
+                        "rgba(23, 190, 207, 0.8)",
+                    ]
+                    
+                    region_color = "rgba(174, 199, 232, 0.8)"
+                    
+                    node_colors = []
+                    for node in all_nodes:
+                        if node in unique_classes:
+                            class_idx = unique_classes.index(node)
+                            node_colors.append(class_colors[class_idx % len(class_colors)])
+                        else:
+                            node_colors.append(region_color)
+                    
+                    link_colors = []
+                    for tgt_idx in target:
+                        if tgt_idx >= len(region_labels):
+                            class_node = all_nodes[tgt_idx]
+                            if class_node in unique_classes:
+                                class_idx = unique_classes.index(class_node)
+                                link_colors.append(class_colors[class_idx % len(class_colors)].replace("0.8", "0.3"))
+                            else:
+                                link_colors.append("rgba(128, 128, 128, 0.3)")
+                        else:
+                            link_colors.append("rgba(128, 128, 128, 0.3)")
+                    
+                    fig = go.Figure(data=[go.Sankey(
+                        node=dict(
+                            pad=15,
+                            thickness=20,
+                            line=dict(color="black", width=0.5),
+                            label=all_nodes,
+                            color=node_colors
+                        ),
+                        link=dict(
+                            source=source,
+                            target=target,
+                            value=value,
+                            color=link_colors
+                        )
+                    )])
+                    
+                    height = max(400, min(1000, len(all_nodes) * 30))
+                    fig.update_layout(
+                        title_text="Flow from Regions to Majority Classes",
+                        font_size=11,
+                        height=height,
+                        width=1200
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption(f"💡 **Legend**: Left nodes (light blue) represent regions. Right nodes (colored) represent classes. Flow width indicates number of samples.")
+            
+            # LLM Explanation Section
+            st.markdown("---")
+            st.subheader("🤖 AI Explanation")
+            
+            if st.button("Get AI Explanation", key="explain_regions"):
+                try:
+                    with st.spinner("Generating explanation..."):
+                        # Ensure results exist
+                        if 'results' not in locals() and 'results' not in globals():
+                            if 'region_results' in st.session_state:
+                                results = st.session_state.region_results
+                            else:
+                                st.error("⚠️ Please run 'Analyze All Regions' first.")
+                                st.stop()
+                        
+                        # Prepare context for LLM
+                        region_stats_df = results['region_stats']
+                        top_regions = region_stats_df.head(5)
+                        top_regions_str = "\n".join([
+                            f"- {row['region_id']}: {row['n_samples']} samples, purity: {row['purity']:.2%}, accuracy: {row['accuracy']:.2%}, majority class: {row['majority_class']}"
+                            for _, row in top_regions.iterrows()
+                        ])
+                        
+                        # Get class distribution from Sankey diagram data
+                        unique_classes = region_stats_df['majority_class'].unique().tolist()
+                        class_distribution = region_stats_df.groupby('majority_class')['n_samples'].sum().to_dict()
+                        class_dist_str = "\n".join([
+                            f"- {cls}: {count} total samples across regions"
+                            for cls, count in sorted(class_distribution.items())
+                        ])
+                        
+                        # Calculate metrics safely
+                        avg_purity_val = results['region_stats']['purity'].mean()
+                        avg_accuracy_val = results['region_stats']['accuracy'].mean()
+                        total_samples_val = results['region_stats']['n_samples'].sum()
+                        
+                        # Get region size statistics
+                        region_sizes = region_stats_df['n_samples'].values
+                        min_size = int(region_sizes.min())
+                        max_size = int(region_sizes.max())
+                        median_size = int(np.median(region_sizes))
+                        
+                        context = f"""
+Region Analysis Context:
+- Total Unique Regions: {results['n_unique_regions']}
+- Average Purity: {avg_purity_val:.2%} (proportion of majority class in each region)
+- Average Accuracy: {avg_accuracy_val:.2%} (prediction accuracy within each region)
+- Total Samples Analyzed: {total_samples_val}
+- Region Size Range: {min_size} to {max_size} samples (median: {median_size})
+- Number of Classes: {len(unique_classes)}
+- Class Distribution:
+{class_dist_str}
+- Top 5 Regions by Sample Size:
+{top_regions_str}
+"""
+                        
+                        prompt = f"""
+Analyze these region analysis results based on what's shown in the Region Analysis tab:
+
+1. **Summary Metrics**: What do the key metrics (Unique Regions: {results['n_unique_regions']}, Avg. Purity: {avg_purity_val:.2%}, Avg. Accuracy: {avg_accuracy_val:.2%}) tell us about the model's behavior and decision-making structure?
+
+2. **Region Statistics Table**: Based on the region statistics showing region_id, n_samples, purity, majority_class, and accuracy, what patterns can you identify? Are there regions with very high or very low purity/accuracy that might indicate model strengths or weaknesses?
+
+3. **Sankey Diagram (Region-to-Class Flow)**: The Sankey diagram shows how samples flow from regions (left, light blue nodes) to their majority classes (right, colored nodes). What does this visualization reveal about:
+   - How well regions map to specific classes?
+   - Whether there's a clear separation between classes in the region space?
+   - The distribution of samples across regions and classes?
+
+4. **Model Interpretability**: How does this region analysis help us understand the model's internal mechanism? What insights can we gain about how the ReLU network partitions the input space into distinct linear regions?
+
+5. **Potential Issues**: Are there any concerning patterns (e.g., regions with low purity, imbalanced region sizes, or regions mapping to wrong classes) that might indicate model problems or areas for improvement?
+"""
+                        
+                        explanation = get_llm_explanation(prompt, context)
+                        st.markdown(explanation)
+                except KeyError as e:
+                    st.error(f"⚠️ Error: Missing data in results. Please run 'Analyze All Regions' first. Error: {str(e)}")
+                except Exception as e:
+                    st.error(f"⚠️ Error generating explanation: {str(e)}")
 
 
 with tab4:
@@ -759,6 +1264,60 @@ with tab4:
             st.subheader("Class Information")
             st.write(f"Number of classes: {len(st.session_state.class_names)}")
             st.write("Class names:", st.session_state.class_names)
+        
+        # LLM Explanation Section
+        st.markdown("---")
+        st.subheader("🤖 AI Explanation")
+        
+        if st.button("Get AI Explanation", key="explain_model"):
+            try:
+                with st.spinner("Generating explanation..."):
+                    # Prepare context for LLM
+                    model_info = []
+                    
+                    if st.session_state.model is not None:
+                        model_info.append(f"Model Architecture: {str(st.session_state.model)}")
+                    else:
+                        st.error("⚠️ No model loaded.")
+                        st.stop()
+                    
+                    if st.session_state.model_params:
+                        params = st.session_state.model_params
+                        num_layers = params.get('num_layers', 0)
+                        model_info.append(f"Number of Hidden Layers: {num_layers}")
+                        
+                        for i in range(num_layers + 1):
+                            w_key = f'w{i}'
+                            b_key = f'b{i}'
+                            if w_key in params:
+                                model_info.append(f"Layer {i}: Weights shape {params[w_key].shape}, Biases shape {params[b_key].shape}")
+                    
+                    if st.session_state.feature_names:
+                        model_info.append(f"Number of Features: {len(st.session_state.feature_names)}")
+                        feature_list = ', '.join(st.session_state.feature_names[:10])
+                        if len(st.session_state.feature_names) > 10:
+                            feature_list += '...'
+                        model_info.append(f"Features: {feature_list}")
+                    
+                    if st.session_state.class_names:
+                        model_info.append(f"Number of Classes: {len(st.session_state.class_names)}")
+                        model_info.append(f"Classes: {', '.join(st.session_state.class_names)}")
+                    
+                    context = "\n".join(model_info)
+                    
+                    prompt = f"""
+Explain this neural network model:
+1. What does this model architecture tell us about its complexity and capacity?
+2. How do the layer sizes and shapes affect the model's ability to learn?
+3. What can we infer about the relationship between the number of features and the model structure?
+4. How does this architecture relate to the Re3 interpretability method?
+5. What are the implications of this model structure for interpretability and explainability?
+"""
+                    
+                    explanation = get_llm_explanation(prompt, context)
+                    st.markdown(explanation)
+            except Exception as e:
+                st.error(f"⚠️ Error generating explanation: {str(e)}")
 
 
 with tab5:

@@ -2,6 +2,8 @@
 
 An interactive web application for analyzing and interpreting ReLU neural networks using the Re3 (ReLU Region Reason) method. This tool provides exact, mathematically-grounded explanations for neural network predictions through piecewise-affine mapping.
 
+**Note**: This application is developed by Ricky Stanley D Cruze (AFRY Digital Solutions AB) and is based on the research paper by Arnab Barua et al. (Mälardalen University).
+
 ## Features
 
 - 🧠 **Model Loading**: Upload your trained PyTorch models or create new ones
@@ -17,6 +19,7 @@ An interactive web application for analyzing and interpreting ReLU neural networ
   - Visualize region size distributions
   - Quality analysis with interactive plots
 - 📋 **Model Information**: View model architecture and parameters
+- 🤖 **AI-Powered Explanations**: GPT-4.1 mini explanations via OpenRouter for deeper insights
 - ℹ️ **About Tab**: Comprehensive project documentation and use cases
 
 ## Installation
@@ -53,7 +56,22 @@ uv pip install -r requirments.txt
 pip install -r requirments.txt
 ```
 
-### Step 3: Run the Application
+### Step 3: Configure OpenRouter API (Optional)
+
+For AI-powered explanations, create a `.env` file in the project root:
+
+```bash
+# Copy the example file
+cp .env.example .env
+
+# Edit .env and add your OpenRouter API key
+# Get your API key from https://openrouter.ai/keys
+OPENROUTER_API_KEY=your_api_key_here
+```
+
+**Note**: The AI explanation feature is optional. The app works without it, but explanations will show a configuration message.
+
+### Step 4: Run the Application
 
 ```bash
 streamlit run app.py
@@ -134,6 +152,7 @@ You have two options:
   - Region ID and activation pattern
   - Class probabilities with visualizations
   - Interactive bar charts and plots
+  - **AI Explanation**: Get GPT-4.1 mini explanation of the prediction
 
 #### Region Analysis Tab
 - Click "Analyze All Regions" to process the entire test set
@@ -142,12 +161,14 @@ You have two options:
   - Detailed region statistics table
   - Region size distribution histogram
   - Purity vs accuracy scatter plot with region size indicators
+  - **AI Explanation**: Get GPT-4.1 mini analysis of region patterns
 
 #### Model Info Tab
 - View complete model architecture
 - Inspect weights and biases for each layer
 - See feature and class information
 - Understand model structure and dimensions
+- **AI Explanation**: Get GPT-4.1 mini explanation of model architecture and interpretability implications
 
 #### About Tab
 - Comprehensive project description
@@ -219,18 +240,20 @@ The application supports ReLU neural networks with:
 
 ```
 .
-├── app.py              # Main Streamlit application
-├── re3_core.py         # Core Re3 computation functions
-├── quick_start.py      # Interactive model training script
-├── requirments.txt     # Python dependencies
-├── QUICK_START_GUIDE.md # Quick start guide
-├── APP_README.md       # This file
-├── iris.csv            # Iris dataset
-├── seeds_dataset.txt   # Seeds dataset
-├── spambase.data       # Spambase dataset
+├── app.py                          # Main Streamlit application
+├── re3_core.py                     # Core Re3 computation functions
+├── quick_start.py                  # Interactive model training script
+├── requirments.txt                 # Python dependencies
+├── .gitignore                      # Git ignore rules
+├── README.md                       # Project overview
+├── APP_README.md                   # This file (application documentation)
+├── QUICK_START_GUIDE.md            # Quick start guide
+├── CONTRIBUTING.md                 # Contribution guidelines
+├── iris.csv                        # Iris dataset
+├── seeds_dataset.txt               # Seeds dataset
+├── spambase.data                   # Spambase dataset
 ├── accelerometer_gyro_mobile_phone_dataset.csv  # Accelerometer dataset
-├── diabetes_binary_health_indicators_BRFSS2015.csv  # Diabetes dataset
-└── trained_*_model_full.pth  # Trained model files
+└── diabetes_binary_health_indicators_BRFSS2015.csv  # Diabetes dataset
 ```
 
 ## Example Workflows
@@ -333,6 +356,12 @@ The application supports ReLU neural networks with:
 - Consider using a subset of data for faster exploration
 - Single sample analysis is always fast regardless of dataset size
 
+### AI Explanation issues
+- **"OpenRouter API key not configured"**: Create a `.env` file with `OPENROUTER_API_KEY=your_key`
+- **API errors**: Check your OpenRouter account balance and API key validity
+- **Slow responses**: AI explanations may take a few seconds - be patient
+- **Feature works without API**: The app functions normally without the API key, just without AI explanations
+
 ## Recent Updates
 
 ### Version 1.0 Updates
@@ -357,16 +386,24 @@ If you use this application in your research, please cite:
   author={Barua, Arnab and Ahmed, Mobyen Uddin and Begum, Shahina},
   journal={Machine Learning},
   year={2025},
-  note={Under review}
+  doi={10.1007/s10994-025-06957-0}
 }
 ```
 
 ## Contact
 
-For questions, issues, or collaboration opportunities:
+### Application Development
+For questions about the application, bugs, or feature requests:
+- **Developer**: Ricky Stanley D Cruze
+- **Email**: rickystanley.dcruze@afry.com
+- **Institution**: AFRY Digital Solutions AB, Västerås, Sweden
+
+### Research & Paper
+For questions about the research methodology or paper:
+- **Lead Researcher**: Arnab Barua
 - **Email**: arnab.barua@mdu.se
 - **Institution**: Mälardalen University, Sweden
-- **Purpose**: Research and Educational Use
+- **Paper**: [Mechanistic Interpretability of ReLU Neural Networks Through Piecewise-Affine Mapping](https://link.springer.com/article/10.1007/s10994-025-06957-0)
 
 ## License
 
@@ -375,3 +412,5 @@ This code is provided for academic and research purposes.
 ---
 
 **Re3: ReLU Region Reason** - Making Neural Networks Transparent, One Region at a Time
+
+*Application developed by Ricky Stanley D Cruze (AFRY Digital Solutions AB) | Based on research by Arnab Barua et al. (Mälardalen University)*
